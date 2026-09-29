@@ -15,7 +15,7 @@ export interface FontInfo {
 const ALL: readonly Mode[] = ['notebook', 'card', 'design']
 
 export const FONTS: readonly FontInfo[] = [
-  { id: 'caveat', family: 'Caveat', file: 'Caveat-Variable.woff2', connected: false, modes: ALL },
+  { id: 'caveat', family: 'Caveat', file: 'Caveat-Regular.woff2', connected: false, modes: ALL },
   { id: 'shantell', family: 'Shantell Sans', file: 'ShantellSans-Regular.woff2', connected: false, modes: ALL },
   { id: 'playpen', family: 'Playpen Sans', file: 'PlaypenSans-Regular.woff2', connected: false, modes: ALL },
   { id: 'badscript', family: 'Bad Script', file: 'BadScript-Regular.woff2', connected: true, modes: ALL },

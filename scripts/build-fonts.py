@@ -40,7 +40,7 @@ SRC = ROOT / "fonts-src"
 OUT = ROOT / "public" / "fonts"
 
 # Variable fonts shipped as a static instance at their axis defaults.
-STATIC_INSTANCES = {"PlaypenSans-Variable.ttf", "ShantellSans-Variable.ttf"}
+STATIC_INSTANCES = {"Caveat-Variable.ttf", "PlaypenSans-Variable.ttf", "ShantellSans-Variable.ttf"}
 
 # Inclusive code point ranges kept in the subset.
 UNICODE_RANGES = [
@@ -67,6 +67,8 @@ APOSTROPHE_MAX_GAP = 0.12  # em, gap from ʻ ʼ ‘ ’ to the next ascender ("l
 APOSTROPHE_MIN_GAP = 0.04  # em, minimum clearance to any neighbour ink at the mark's height
 GAP_PREVIOUS = "ogOG"  # oʻ gʻ Oʻ Gʻ: the mark must not collide with the letter it modifies
 GAP_NEXT = "lazonrmbdhkt"  # letters that commonly follow them
+CENTRE_PREVIOUS = "og"  # oʻ gʻ
+CENTRE_NEXT = "lazo"  # common followers; the mark must not hang over their box
 
 
 def bounds(font: TTFont, name: str) -> tuple[int, int, int, int]:
@@ -209,6 +211,32 @@ def fix_gap_after_apostrophe(font: TTFont, log: list[str]) -> None:
         if reduce > 0:
             adv -= reduce
             changes.append(f"advance -{reduce} (gap to 'l' {gaps['l']:.0f} -> {gaps['l'] - reduce:.0f})")
+
+        # Centre: a mark hanging over the next letter's box is moved left (the next letter stays put) until it
+        # sits midway between the previous and next letter, without touching O/G at the mark's height.
+        def ink_x(ch: str) -> tuple[float, float]:
+            xs = [x for x, _ in neighbour[ch]]
+            return min(xs), max(xs)
+
+        over_next = max((ink_right - (adv + ink_x(ch)[0]) for ch in CENTRE_NEXT if ch in neighbour), default=0)
+        from_prev = min(
+            (ink_left - (ink_x(ch)[1] - hmtx[cmap[ord(ch)]][0]) for ch in CENTRE_PREVIOUS if ch in neighbour),
+            default=0,
+        )
+        band_clearance = min(
+            (ink_left - (max(xs) - hmtx[cmap[ord(ch)]][0]) for ch in GAP_PREVIOUS if (xs := band_x(ch, y_lo, y_hi))),
+            default=math.inf,
+        )
+        nudge = round(min((over_next + from_prev) / 2, band_clearance - min_gap)) if over_next > 0 else 0
+        if nudge > 0:
+            g = glyf[name]
+            if g.isComposite():
+                for c in g.components:
+                    c.x -= nudge
+            else:
+                g.coordinates.translate((-nudge, 0))
+            g.recalcBounds(glyf)
+            changes.append(f"mark moved left {nudge} (over next letter {over_next:.0f} -> {over_next - nudge:.0f})")
 
         if changes:
             hmtx[name] = (adv, round(glyf[name].xMin))

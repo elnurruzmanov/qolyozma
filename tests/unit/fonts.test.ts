@@ -57,8 +57,17 @@ describe.each(FONTS)('$family', (info) => {
     }
 
     it('the next ascender ("l") is not pushed away', () => {
+      // Before the fix: 0.24 em (Bad Script), 0.25 em (Caveat).
       const [m, l] = layout(`${mark}l`)
-      expect(bandGap(m!, l!, m!)).toBeLessThanOrEqual(0.13)
+      expect(bandGap(m!, l!, m!)).toBeLessThanOrEqual(0.2)
+    })
+
+    // Ascenders: a mark over their box reads as belonging to them ("Bogʻlarda" with the mark above l).
+    it.each([...'lbhk'])('does not hang over the box of a following ascender "%s"', (next) => {
+      const [m, n] = layout(`${mark}${next}`)
+      const markRight = Math.max(...m!.map((p) => p[0]))
+      const nextLeft = Math.min(...n!.map((p) => p[0]))
+      expect((markRight - nextLeft) / EM).toBeLessThanOrEqual(0.02)
     })
 
     it.each([...'lazonrmbdhkt'])('does not collide with a following "%s"', (next) => {

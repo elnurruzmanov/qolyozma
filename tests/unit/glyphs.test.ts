@@ -13,7 +13,7 @@ import {
 import { loadFontFile } from './fontLoader'
 import { flatten, meanTurningAngle, perimeter } from './geometry'
 
-const caveat = await loadFontFile('Caveat-Variable.woff2')
+const caveat = await loadFontFile('Caveat-Regular.woff2')
 const badScript = await loadFontFile('BadScript-Regular.woff2')
 const fonts = new Map(await Promise.all(FONTS.map(async (f) => [f.id, await loadFontFile(f.file)] as const)))
 const opts = { x: 0, y: 50, fontSize: 40, seed: 42 }
