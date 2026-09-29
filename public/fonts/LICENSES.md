@@ -10,13 +10,16 @@ their names (OFL-1.1 §3); their version string notes the modification.
 | File | Family | License | Source | Modified |
 | ---- | ------ | ------- | ------ | -------- |
 | `Caveat-Variable.woff2` | Caveat | [OFL-1.1](licenses/Caveat-OFL.txt) | https://github.com/google/fonts/tree/main/ofl/caveat | yes |
-| `ShantellSans-Variable.woff2` | Shantell Sans | [OFL-1.1](licenses/ShantellSans-OFL.txt) | https://github.com/google/fonts/tree/main/ofl/shantellsans | yes |
-| `PlaypenSans-Variable.woff2` | Playpen Sans | [OFL-1.1](licenses/PlaypenSans-OFL.txt) | https://github.com/google/fonts/tree/main/ofl/playpensans | yes |
+| `ShantellSans-Regular.woff2` | Shantell Sans | [OFL-1.1](licenses/ShantellSans-OFL.txt) | https://github.com/google/fonts/tree/main/ofl/shantellsans | yes |
+| `PlaypenSans-Regular.woff2` | Playpen Sans | [OFL-1.1](licenses/PlaypenSans-OFL.txt) | https://github.com/google/fonts/tree/main/ofl/playpensans | yes |
 | `BadScript-Regular.woff2` | Bad Script | [OFL-1.1](licenses/BadScript-OFL.txt) | https://github.com/google/fonts/tree/main/ofl/badscript | yes |
 | `Pacifico-Regular.woff2` | Pacifico | [OFL-1.1](licenses/Pacifico-OFL.txt) | https://github.com/google/fonts/tree/main/ofl/pacifico | yes |
 
 ## Modifications
 
+- **Playpen Sans, Shantell Sans:** variable fonts pinned to a static instance at their axis defaults
+  (Playpen Sans wght 400; Shantell Sans wght 300, INFM 0, BNCE 0, SPAC 0) with fontTools.varLib.instancer;
+  files renamed `-Variable` -> `-Regular`.
 - **All fonts:** subset to Latin, Latin Extended, Cyrillic (incl. Uzbek letters), combining marks and
   punctuation (see `UNICODE_RANGES` in the build script); hinting removed; converted to WOFF2.
 - **Caveat, Shantell Sans, Bad Script, Pacifico:** U+02BB (ʻ, as in oʻ gʻ) added to the character map,

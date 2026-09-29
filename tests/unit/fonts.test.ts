@@ -79,7 +79,9 @@ describe('font folder', () => {
   })
 
   it('every built font has a pristine source in fonts-src', () => {
-    expect(sources.map((f) => f.replace(/\.ttf$/, '.woff2')).sort()).toEqual([...files].sort())
+    // Static instances of variable sources are renamed *-Variable -> *-Regular by the build.
+    const family = (f: string) => f.replace(/-(Variable|Regular)\.(ttf|woff2)$/, '')
+    expect(sources.map(family).sort()).toEqual(files.map(family).sort())
   })
 
   it.each(files)('%s is listed in LICENSES.md with a license file', (file) => {

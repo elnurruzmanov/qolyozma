@@ -2,6 +2,10 @@
 
 Run with:  npm run build:fonts   (uv run --no-project --with fonttools[woff]==4.66.0 python scripts/build-fonts.py)
 
+Fonts in STATIC_INSTANCES are first pinned to a static instance at every axis default with
+fontTools.varLib.instancer: the renderer draws the default instance only and varies weight with stroke width,
+so the variation data is dead weight. The output is renamed `*-Variable` -> `*-Regular`.
+
 Fixes applied only where a font needs them; every change is printed and must be listed in
 public/fonts/LICENSES.md:
 
@@ -25,10 +29,14 @@ from pathlib import Path
 from fontTools import subset
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables._g_l_y_f import Glyph, GlyphComponent
+from fontTools.varLib import instancer
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "fonts-src"
 OUT = ROOT / "public" / "fonts"
+
+# Variable fonts shipped as a static instance at their axis defaults.
+STATIC_INSTANCES = {"PlaypenSans-Variable.ttf", "ShantellSans-Variable.ttf"}
 
 # Inclusive code point ranges kept in the subset.
 UNICODE_RANGES = [
@@ -199,9 +207,23 @@ def subset_to_ranges(font: TTFont) -> None:
     subsetter.subset(font)
 
 
+def pin_to_default_instance(font: TTFont, log: list[str]) -> TTFont:
+    axes = font["fvar"].axes
+    static = instancer.instantiateVariableFont(font, {a.axisTag: None for a in axes})  # None = axis default
+    log.append("static instance at " + ", ".join(f"{a.axisTag}={a.defaultValue:g}" for a in axes))
+    return static
+
+
+def output_name(src: Path) -> str:
+    stem = src.stem.replace("-Variable", "-Regular") if src.name in STATIC_INSTANCES else src.stem
+    return f"{stem}.woff2"
+
+
 def build(src: Path) -> tuple[Path, list[str]]:
-    font = TTFont(src)
+    font = TTFont(src, recalcTimestamp=False)  # reproducible output: keep the source timestamp
     log: list[str] = []
+    if src.name in STATIC_INSTANCES:
+        font = pin_to_default_instance(font, log)
     fix_modifier_letters(font, log)
     fix_apostrophe_spacing(font, log)
     fix_missing_breve(font, log)
@@ -210,7 +232,7 @@ def build(src: Path) -> tuple[Path, list[str]]:
     subset_to_ranges(font)
     log.append(f"subset: {glyphs_before} -> {len(font.getGlyphOrder())} glyphs, hinting dropped, WOFF2")
     stamp_version(font)
-    out = OUT / f"{src.stem}.woff2"
+    out = OUT / output_name(src)
     font.flavor = "woff2"
     font.save(out)
     return out, log

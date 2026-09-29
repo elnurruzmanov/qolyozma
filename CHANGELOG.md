@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Playpen Sans and Shantell Sans ship as static instances at their axis defaults (outlines unchanged): Playpen 484 -> 194 KB, Shantell 396 -> 95 KB WOFF2; all fonts 1,159 -> 568 KB. Weight is varied by the renderer via stroke width, not font axes.
 - Fonts ship as WOFF2 subsets (Latin, Latin-ext, Cyrillic incl. Uzbek, punctuation): 3,681 KB of TTF -> 1,159 KB. opentype.js cannot read WOFF2, so `core/render/fontFile.ts` decompresses it with `woff2-encoder` (WASM, lazy-loaded chunk, 128 KB gzip).
 - Visible, readable variation: line slope, per-word baseline and spacing, per-glyph rotation/size/width, control-point jitter up to 3% em and ink-pressure stroke. New "Tabiiylik" slider (0–10, default 5) scales all of it.
 - Font build pipeline (`npm run build:fonts`, fontTools): adds U+02BB where missing, fixes wide side bearings on ʻ ʼ ‘ ’, rebuilds Bad Script Ў with its missing breve, unhooks Shantell Sans ccmp that opentype.js cannot run. Pristine sources in `fonts-src/`.
