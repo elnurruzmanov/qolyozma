@@ -11,7 +11,7 @@ npm run dev      # local dev server
 npm run lint     # ESLint
 npm run test     # Vitest unit tests
 npm run e2e      # Playwright E2E (run `npx playwright install` once)
-npm run build:fonts  # rebuild public/fonts from fonts-src (needs uv)
+npm run build:fonts  # rebuild public/fonts/*.woff2 from fonts-src/*.ttf (needs uv)
 ```
 
 ## Stack

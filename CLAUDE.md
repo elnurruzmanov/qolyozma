@@ -44,7 +44,8 @@ src/
   modes/          NotebookMode.tsx, CardMode.tsx, DesignMode.tsx
   ui/             shared components
   templates/      card templates as JSON + SVG assets
-public/fonts/     .ttf files + LICENSES.md
+public/fonts/     built .woff2 subsets + LICENSES.md (never edit; run npm run build:fonts)
+fonts-src/        pristine source .ttf files
 legacy/prototype.html   working single-file prototype — reference only, do not import
 tests/
   unit/  e2e/  fixtures/  (sample PDFs: text-only, tables, scanned, mixed)

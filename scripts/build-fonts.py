@@ -1,6 +1,6 @@
-"""Build public/fonts from the pristine OFL fonts in fonts-src.
+"""Build public/fonts/*.woff2 from the pristine OFL fonts in fonts-src/*.ttf.
 
-Run with:  npm run build:fonts   (uv run --no-project --with fonttools==4.66.0 python scripts/build-fonts.py)
+Run with:  npm run build:fonts   (uv run --no-project --with fonttools[woff]==4.66.0 python scripts/build-fonts.py)
 
 Fixes applied only where a font needs them; every change is printed and must be listed in
 public/fonts/LICENSES.md:
@@ -11,6 +11,9 @@ public/fonts/LICENSES.md:
 3. Missing breve: rebuild Ў / ў as base (У / у) + breve when the source glyph has no breve.
 4. opentype.js compatibility: unhook `ccmp` features whose chaining lookups opentype.js can't run.
 
+Then every font is subset to UNICODE_RANGES (Latin, Latin-ext, Cyrillic incl. Uzbek, punctuation),
+hinting dropped (we render outlines ourselves), and written as WOFF2.
+
 None of the fonts declares a Reserved Font Name, so modified versions keep their family names (OFL-1.1 §3).
 """
 
@@ -19,12 +22,29 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from fontTools import subset
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables._g_l_y_f import Glyph, GlyphComponent
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "fonts-src"
 OUT = ROOT / "public" / "fonts"
+
+# Inclusive code point ranges kept in the subset.
+UNICODE_RANGES = [
+    (0x0020, 0x007E),  # Basic Latin
+    (0x00A0, 0x00FF),  # Latin-1 Supplement
+    (0x0100, 0x024F),  # Latin Extended-A, -B
+    (0x0250, 0x02FF),  # IPA extensions, spacing modifier letters (ʻ ʼ ˘ ˆ ...)
+    (0x0300, 0x036F),  # combining diacritics (decomposed input: o + U+0306 ...)
+    (0x0400, 0x052F),  # Cyrillic, Cyrillic Supplement (Ў Ғ Қ Ҳ and friends)
+    (0x1E00, 0x1EFF),  # Latin Extended Additional
+    (0x2000, 0x206F),  # General Punctuation (– — ‘ ’ “ ” „ … • ‰ ‹ ›)
+    (0x20A0, 0x20CF),  # currency (€ ₽ ₸ ...)
+    (0x2116, 0x2116),  # №
+    (0x2122, 0x2122),  # ™
+    (0x2212, 0x2212),  # minus
+]
 
 MODIFIER_FALLBACKS = {0x02BB: 0x2018, 0x02BC: 0x2019}
 APOSTROPHES = (0x02BB, 0x02BC, 0x2018, 0x2019)
@@ -158,34 +178,64 @@ def drop_unsupported_ccmp(font: TTFont, log: list[str]) -> None:
     log.append(f"GSUB: disabled {len(bad)} ccmp feature record(s) with chaining lookups opentype.js can't run")
 
 
-def stamp_version(font: TTFont, log: list[str]) -> None:
-    if not log:
-        return
+def stamp_version(font: TTFont) -> None:
     note = "; modified by Qolyozma build-fonts (see LICENSES.md)"
     for rec in font["name"].names:
         if rec.nameID == 5 and note not in rec.toUnicode():
             rec.string = rec.toUnicode() + note
 
 
-def build(src: Path) -> list[str]:
+def subset_to_ranges(font: TTFont) -> None:
+    options = subset.Options()
+    options.layout_features = ["*"]  # keep every OpenType feature for the glyphs we keep
+    options.name_IDs = ["*"]  # keep copyright / license / version records (OFL)
+    options.name_languages = ["*"]
+    options.name_legacy = True
+    options.hinting = False  # outlines are rendered by opentype.js, hints are never used
+    options.notdef_outline = True
+    options.flavor = "woff2"
+    subsetter = subset.Subsetter(options)
+    subsetter.populate(unicodes=[cp for lo, hi in UNICODE_RANGES for cp in range(lo, hi + 1)])
+    subsetter.subset(font)
+
+
+def build(src: Path) -> tuple[Path, list[str]]:
     font = TTFont(src)
     log: list[str] = []
     fix_modifier_letters(font, log)
     fix_apostrophe_spacing(font, log)
     fix_missing_breve(font, log)
     drop_unsupported_ccmp(font, log)
-    stamp_version(font, log)
-    font.save(OUT / src.name)
-    return log
+    glyphs_before = len(font.getGlyphOrder())
+    subset_to_ranges(font)
+    log.append(f"subset: {glyphs_before} -> {len(font.getGlyphOrder())} glyphs, hinting dropped, WOFF2")
+    stamp_version(font)
+    out = OUT / f"{src.stem}.woff2"
+    font.flavor = "woff2"
+    font.save(out)
+    return out, log
+
+
+def kb(n: int) -> str:
+    return f"{n / 1024:,.0f} KB"
 
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    rows = []
     for src in sorted(SRC.glob("*.ttf")):
-        log = build(src)
-        print(f"{src.name}: {'unchanged' if not log else ''}")
+        out, log = build(src)
+        print(f"{src.name} -> {out.name}")
         for line in log:
             print(f"  - {line}")
+        rows.append((out.name, src.stat().st_size, out.stat().st_size))
+
+    print(f"\n{'font':<32}{'source TTF':>12}{'WOFF2':>10}{'saved':>8}")
+    for name, before, after in rows:
+        print(f"{name:<32}{kb(before):>12}{kb(after):>10}{1 - after / before:>8.0%}")
+    total_before = sum(r[1] for r in rows)
+    total_after = sum(r[2] for r in rows)
+    print(f"{'total':<32}{kb(total_before):>12}{kb(total_after):>10}{1 - total_after / total_before:>8.0%}")
     return 0
 
 

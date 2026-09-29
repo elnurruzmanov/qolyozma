@@ -12,12 +12,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "build:fonts": "uv run --no-project --with fonttools==4.66.0 python scripts/build-fonts.py"
+    "build:fonts": "uv run --no-project --with fonttools[woff]==4.66.0 python scripts/build-fonts.py"
   },
   "dependencies": {
     "opentype.js": "^2.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "woff2-encoder": "^2.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

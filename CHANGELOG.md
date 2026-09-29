@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fonts ship as WOFF2 subsets (Latin, Latin-ext, Cyrillic incl. Uzbek, punctuation): 3,681 KB of TTF -> 1,159 KB. opentype.js cannot read WOFF2, so `core/render/fontFile.ts` decompresses it with `woff2-encoder` (WASM, lazy-loaded chunk, 128 KB gzip).
 - Visible, readable variation: line slope, per-word baseline and spacing, per-glyph rotation/size/width, control-point jitter up to 3% em and ink-pressure stroke. New "Tabiiylik" slider (0–10, default 5) scales all of it.
 - Font build pipeline (`npm run build:fonts`, fontTools): adds U+02BB where missing, fixes wide side bearings on ʻ ʼ ‘ ’, rebuilds Bad Script Ў with its missing breve, unhooks Shantell Sans ccmp that opentype.js cannot run. Pristine sources in `fonts-src/`.
 - Fonts are tagged with the modes they are allowed in; Pacifico is Card/Design only. Added Shantell Sans for Notebook.

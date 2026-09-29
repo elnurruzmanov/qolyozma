@@ -4,8 +4,8 @@ import { FONTS } from '../../src/core/fonts'
 import { JITTER, commandsToSvgPath, measureText, renderRun, shape } from '../../src/core/render/glyphs'
 import { loadFontFile } from './fontLoader'
 
-const caveat = loadFontFile('Caveat-Variable.ttf')
-const badScript = loadFontFile('BadScript-Regular.ttf')
+const caveat = await loadFontFile('Caveat-Variable.woff2')
+const badScript = await loadFontFile('BadScript-Regular.woff2')
 const opts = { x: 0, y: 50, fontSize: 40, seed: 42 }
 const TEXT = 'Oʻzbekiston goʻzal ўғқҳ '.repeat(8)
 const svg = (run: ReturnType<typeof renderRun>) => run.glyphs.map((g) => commandsToSvgPath(g.commands)).join('|')
@@ -86,8 +86,8 @@ describe('renderRun', () => {
   })
 
   // Regression for "Playpen Sans shows no jitter": outlines must move by a comparable amount in every font.
-  it.each(FONTS)('$family: outlines visibly move at the default naturalness', (info) => {
-    const font = loadFontFile(info.file)
+  it.each(FONTS)('$family: outlines visibly move at the default naturalness', async (info) => {
+    const font = await loadFontFile(info.file)
     const plain = renderRun(font, 'oooo', { ...opts, naturalness: 0 })
     const jittered = renderRun(font, 'oooo', opts)
     let sum = 0

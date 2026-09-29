@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { parse, type Font } from 'opentype.js'
+import type { Font } from 'opentype.js'
 import { FONTS, fontsForMode, type Mode } from '../core/fonts'
 import {
   NATURALNESS_DEFAULT,
@@ -9,6 +9,7 @@ import {
   type GlyphRun,
 } from '../core/render/glyphs'
 import { drawRuns } from '../core/render/canvas'
+import { parseFontFile } from '../core/render/fontFile'
 
 const SAMPLE =
   'Oʻzbekiston — goʻzal yurt. Bogʻlarda gʻoʻza ochildi, maʼno toʻla kun. ' +
@@ -34,7 +35,7 @@ function loadFont(file: string): Promise<Font> {
         if (!r.ok) throw new Error(`Font ${file}: HTTP ${r.status}`)
         return r.arrayBuffer()
       })
-      .then((buf) => parse(buf))
+      .then(parseFontFile)
     fontCache.set(file, p)
   }
   return p

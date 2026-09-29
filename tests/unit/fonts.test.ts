@@ -6,13 +6,32 @@ import { FONTS, REQUIRED_CHARS, fontsForMode, type Mode } from '../../src/core/f
 import { measureText } from '../../src/core/render/glyphs'
 import { FONTS_DIR, loadFontFile } from './fontLoader'
 
+const fonts = new Map(await Promise.all(FONTS.map(async (f) => [f.id, await loadFontFile(f.file)] as const)))
+
+/** Must survive subsetting: Latin-1/Latin-ext, Cyrillic, punctuation used in Uzbek, Russian and English text. */
+const SUBSET_SAMPLE = [
+  ...'AZaz09ÀÉÖÜßàéöüçğışŞİ',
+  ...'АЯаяЁёЙйЩщЪъЫыЭэ',
+  ...`.,:;!?()[]"'-–—…«»“”„‘’№%&@#€`,
+]
+
 const codepoint = (c: string) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
 
 describe.each(FONTS)('$family', (info) => {
-  const font = loadFontFile(info.file)
+  const font = fonts.get(info.id)!
 
   it.each(REQUIRED_CHARS.map((c) => [c, codepoint(c)]))('has a glyph for %s (%s)', (ch) => {
     expect(font.charToGlyphIndex(ch), `${info.file} has no glyph for ${ch}`).not.toBe(0)
+  })
+
+  it('is a WOFF2 file', () => {
+    expect(info.file).toMatch(/\.woff2$/)
+    expect(readFileSync(resolve(FONTS_DIR, info.file)).subarray(0, 4).toString('latin1')).toBe('wOF2')
+  })
+
+  it('keeps Latin-ext, Cyrillic and punctuation after subsetting', () => {
+    const missing = SUBSET_SAMPLE.filter((ch) => font.charToGlyphIndex(ch) === 0)
+    expect(missing, `${info.file} lost: ${missing.join(' ')}`).toEqual([])
   })
 
   it('shapes mixed Uzbek text with opentype.js without errors', () => {
@@ -60,7 +79,7 @@ describe('font folder', () => {
   })
 
   it('every built font has a pristine source in fonts-src', () => {
-    expect([...sources].sort()).toEqual([...files].sort())
+    expect(sources.map((f) => f.replace(/\.ttf$/, '.woff2')).sort()).toEqual([...files].sort())
   })
 
   it.each(files)('%s is listed in LICENSES.md with a license file', (file) => {
