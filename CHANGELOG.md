@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Parsing (session 3): `core/parse/pdf.ts` (pdf.js legacy build: text runs, vector paths, images per page) + `core/parse/pdfLayout.ts` (pure analysis: tables from ruled grids incl. hairline-rectangle borders, diagrams from clustered shapes with labels, paragraphs/headings with document-wide font statistics, scanned pages flagged for OCR) + `core/parse/text.ts` (plain text, NFC and whitespace normalisation). Document model extended for diagrams (shapes, labels) and scanned pages. Deterministic PDF fixtures from `scripts/make-fixtures.mjs` (`npm run fixtures`).
 - Caveat ships as a static instance too (164 -> 97 KB). Bad Script: ʻ ’ moved left so the mark sits between letters, not over the next ascender; test checks marks never hang over a following l/b/h/k.
 - Smooth deformation instead of per-point jitter: per-glyph affine (rotation, size, width, new shear) plus one low-frequency displacement field, so edges and stroke width stay clean. "Tabiiylik" rescaled: 10 = 1.6× the default instead of 2×. Unit test compares perimeter and mean turning angle of every deformed glyph with the original, with a negative control.
 - Font build: ʻ ʼ ‘ ’ fitted at the mark’s own height (fixes "Bogʻ larda", "toʻ la" in Bad Script and Caveat; slanted O/G no longer cover the mark). Test measures the gap to following and preceding letters in every font.
