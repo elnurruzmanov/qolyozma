@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:fonts": "uv run --no-project --with fonttools==4.66.0 python scripts/build-fonts.py"
   },
   "dependencies": {
     "opentype.js": "^2.0.0",

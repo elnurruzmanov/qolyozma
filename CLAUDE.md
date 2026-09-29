@@ -52,7 +52,14 @@ tests/
 
 ## Rendering principle (why it looks handwritten)
 
-Real handwriting never repeats a letter exactly. For each glyph: load the outline with opentype.js, then apply small, seeded random distortion — move path control points by 0.5–2% of em size, rotate ±1.5°, vary baseline ±1px, vary advance width ±3%. Words keep the font's connections (cursive fonts). Seed is per document so re-rendering is stable, "Redraw" changes the seed.
+Real handwriting never repeats a letter exactly. Load each outline with opentype.js, then apply seeded random distortion at three levels (amplitudes at the default "Tabiiylik" = 5; the 0–10 slider scales them all linearly, 0 = plain font):
+- line: baseline slope ±0.8°
+- word: baseline offset ±2px, spacing to the next word ±15%
+- glyph: rotation ±3°, size ±4%, width ±5%, control points moved up to 3% of em, slight stroke-width (ink pressure) variation
+
+Cursive fonts apply rotation/size/width per word so the font's connections stay intact. Seed is per document so re-rendering is stable, "Redraw" changes the seed. Values live in `JITTER` in `src/core/render/glyphs.ts`.
+
+Fonts are built from `fonts-src/` into `public/fonts/` by `npm run build:fonts` (fontTools via uv); fixes to font files go there, never by hand.
 
 ## Conventions
 

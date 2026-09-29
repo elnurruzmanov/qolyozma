@@ -2,6 +2,8 @@ import type { GlyphRun } from './glyphs'
 
 export function drawRuns(ctx: CanvasRenderingContext2D, runs: GlyphRun[], color: string): void {
   ctx.fillStyle = color
+  ctx.strokeStyle = color
+  ctx.lineJoin = 'round'
   for (const run of runs) {
     for (const glyph of run.glyphs) {
       ctx.beginPath()
@@ -25,6 +27,11 @@ export function drawRuns(ctx: CanvasRenderingContext2D, runs: GlyphRun[], color:
         }
       }
       ctx.fill()
+      // Ink pressure: a thin stroke in the same color thickens the letter slightly.
+      if (glyph.strokeWidth > 0) {
+        ctx.lineWidth = glyph.strokeWidth
+        ctx.stroke()
+      }
     }
   }
 }
