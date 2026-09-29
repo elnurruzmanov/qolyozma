@@ -53,12 +53,14 @@ tests/
 
 ## Rendering principle (why it looks handwritten)
 
-Real handwriting never repeats a letter exactly. Load each outline with opentype.js, then apply seeded random distortion at three levels (amplitudes at the default "Tabiiylik" = 5; the 0–10 slider scales them all linearly, 0 = plain font):
+Real handwriting never repeats a letter exactly, but a pen stroke is always smooth. Load each outline with opentype.js, then apply seeded, smooth distortion at three levels (amplitudes at the default "Tabiiylik" = 5; 0 = plain font, 10 = 1.6× and must stay easy to read):
 - line: baseline slope ±0.8°
 - word: baseline offset ±2px, spacing to the next word ±15%
-- glyph: rotation ±3°, size ±4%, width ±5%, control points moved up to 3% of em, slight stroke-width (ink pressure) variation
+- glyph: affine — rotation ±3°, size ±4%, width ±5%, shear ±4° — plus one low-frequency displacement field (≤2.5% em, 0.3–0.7 cycles/em) sampled at each point's position, and slight stroke-width (ink pressure) variation
 
-Cursive fonts apply rotation/size/width per word so the font's connections stay intact. Seed is per document so re-rendering is stable, "Redraw" changes the seed. Values live in `JITTER` in `src/core/render/glyphs.ts`.
+Never move outline points independently: it tears the edges and breaks stroke width. A unit test compares each deformed contour's perimeter and mean turning angle with the original.
+
+Cursive fonts apply the affine and the field per word, in word coordinates, so the font's connections stay intact. Seed is per document so re-rendering is stable, "Redraw" changes the seed. Values live in `JITTER` in `src/core/render/glyphs.ts`.
 
 Fonts are built from `fonts-src/` into `public/fonts/` by `npm run build:fonts` (fontTools via uv); fixes to font files go there, never by hand.
 

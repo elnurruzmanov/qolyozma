@@ -3,8 +3,9 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { FONTS, REQUIRED_CHARS, fontsForMode, type Mode } from '../../src/core/fonts'
-import { measureText } from '../../src/core/render/glyphs'
+import { renderRun } from '../../src/core/render/glyphs'
 import { FONTS_DIR, loadFontFile } from './fontLoader'
+import { flatten, type Point } from './geometry'
 
 const fonts = new Map(await Promise.all(FONTS.map(async (f) => [f.id, await loadFontFile(f.file)] as const)))
 
@@ -38,16 +39,39 @@ describe.each(FONTS)('$family', (info) => {
     expect(() => font.stringToGlyphs('Oʻzbekiston goʻzal maʼno. Ўзбекистон Қ Ҳ Ғ fi')).not.toThrow()
   })
 
-  it.each(['ʻ', 'ʼ'])('keeps %s tight: no wide gap around the modifier letter', (mark) => {
-    const size = 100
-    const [glyph] = font.stringToGlyphs(mark)
-    glyph!.getPath(0, 0, size, undefined, font) // resolves lazy metrics
-    const box = glyph!.getBoundingBox()
-    const lsb = (box.x1 / font.unitsPerEm) * size
-    const rsb = ((glyph!.advanceWidth! - box.x2) / font.unitsPerEm) * size
-    expect(lsb, 'left bearing').toBeLessThanOrEqual(8)
-    expect(rsb, 'right bearing').toBeGreaterThanOrEqual(-1)
-    expect(measureText(font, `o${mark}`, size) - measureText(font, 'o', size)).toBeLessThan(0.35 * size)
+  describe.each(['ʻ', 'ʼ'])('spacing around %s, measured at the mark’s own height', (mark) => {
+    // Gap between the mark's ink and a neighbour's ink inside the mark's vertical band, in em. In slanted fonts
+    // the bounding boxes look fine while the ascender of "l" leans away ("Bogʻ larda") — hence the band.
+    const EM = 100
+    const layout = (text: string) =>
+      renderRun(font, text, { x: 0, y: 0, fontSize: EM, seed: 1, naturalness: 0 }).glyphs.map((g) =>
+        flatten(g.commands).flat(),
+      )
+    const bandGap = (left: Point[], right: Point[], band: Point[]) => {
+      const lo = Math.min(...band.map((p) => p[1]))
+      const hi = Math.max(...band.map((p) => p[1]))
+      const inBand = (pts: Point[]) => pts.filter((p) => p[1] >= lo && p[1] <= hi).map((p) => p[0])
+      const l = inBand(left)
+      const r = inBand(right)
+      return l.length && r.length ? (Math.min(...r) - Math.max(...l)) / EM : undefined
+    }
+
+    it('the next ascender ("l") is not pushed away', () => {
+      const [m, l] = layout(`${mark}l`)
+      expect(bandGap(m!, l!, m!)).toBeLessThanOrEqual(0.13)
+    })
+
+    it.each([...'lazonrmbdhkt'])('does not collide with a following "%s"', (next) => {
+      const [m, n] = layout(`${mark}${next}`)
+      const gap = bandGap(m!, n!, m!)
+      if (gap !== undefined) expect(gap).toBeGreaterThanOrEqual(0.03)
+    })
+
+    it.each([...'ogOG'])('does not collide with a preceding "%s"', (prev) => {
+      const [p, m] = layout(`${prev}${mark}`)
+      const gap = bandGap(p!, m!, m!)
+      if (gap !== undefined) expect(gap).toBeGreaterThanOrEqual(0.03)
+    })
   })
 })
 

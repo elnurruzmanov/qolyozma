@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Smooth deformation instead of per-point jitter: per-glyph affine (rotation, size, width, new shear) plus one low-frequency displacement field, so edges and stroke width stay clean. "Tabiiylik" rescaled: 10 = 1.6× the default instead of 2×. Unit test compares perimeter and mean turning angle of every deformed glyph with the original, with a negative control.
+- Font build: ʻ ʼ ‘ ’ fitted at the mark’s own height (fixes "Bogʻ larda", "toʻ la" in Bad Script and Caveat; slanted O/G no longer cover the mark). Test measures the gap to following and preceding letters in every font.
 - Playpen Sans and Shantell Sans ship as static instances at their axis defaults (outlines unchanged): Playpen 484 -> 194 KB, Shantell 396 -> 95 KB WOFF2; all fonts 1,159 -> 568 KB. Weight is varied by the renderer via stroke width, not font axes.
 - Fonts ship as WOFF2 subsets (Latin, Latin-ext, Cyrillic incl. Uzbek, punctuation): 3,681 KB of TTF -> 1,159 KB. opentype.js cannot read WOFF2, so `core/render/fontFile.ts` decompresses it with `woff2-encoder` (WASM, lazy-loaded chunk, 128 KB gzip).
 - Visible, readable variation: line slope, per-word baseline and spacing, per-glyph rotation/size/width, control-point jitter up to 3% em and ink-pressure stroke. New "Tabiiylik" slider (0–10, default 5) scales all of it.

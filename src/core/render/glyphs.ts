@@ -1,16 +1,18 @@
 /**
- * Handwriting-style jitter on top of opentype.js outlines.
+ * Handwriting-style deformation on top of opentype.js outlines.
  *
- * Real handwriting never repeats a letter exactly. Every line, word and glyph gets a small seeded
- * distortion (amplitudes in JITTER, at naturalness 5):
+ * Real handwriting never repeats a letter exactly, but a pen stroke is still smooth. So nothing moves points
+ * independently (that tears the edges and breaks stroke width). Instead, with seeded amplitudes from JITTER:
  *   line  — baseline slope
  *   word  — baseline offset, spacing to the next word
- *   glyph — rotation, size, width, control-point jitter, stroke width ("ink pressure")
- * `naturalness` 0–10 scales every amplitude linearly (0 = the plain font, 10 = double).
+ *   glyph — affine: rotation, size, width, shear; plus one smooth, low-frequency displacement field sampled
+ *           at each point's position, so neighbouring points (and both edges of a stroke) move together;
+ *           stroke width ("ink pressure")
+ * `naturalness` 0–10 scales every amplitude (see naturalnessScale): 0 = the plain font, 5 = JITTER as written.
  * The same seed always gives the same output; "Redraw" = new seed.
  *
- * Connected (cursive) fonts apply rotation/size/width to the whole word instead of single letters, and
- * point jitter fades out near the glyph's side bearings, so the joins between letters stay closed.
+ * Connected (cursive) fonts apply the affine and the displacement field per word, in word coordinates, so the
+ * field is continuous across the joins between letters.
  */
 import type { Font, Glyph, PathCommand } from 'opentype.js'
 
@@ -22,14 +24,26 @@ export const JITTER = {
   glyphRotationDeg: 3,
   size: 0.04,
   width: 0.05,
-  /** Max control-point offset, fraction of the em size. */
-  point: 0.03,
+  shearDeg: 4,
+  /** Peak displacement of the smooth field, fraction of the em size. */
+  field: 0.025,
+  /** Spatial frequency range of the field, in cycles per em: well below stroke-width detail. */
+  fieldFrequency: [0.3, 0.7],
   /** Max extra stroke width (ink pressure), fraction of the em size. */
-  stroke: 0.025,
+  stroke: 0.015,
 } as const
 
 export const NATURALNESS_DEFAULT = 5
 export const NATURALNESS_MAX = 10
+
+/**
+ * Amplitude multiplier for a slider value: linear up to the default (5 -> 1), then flatter so that 10 (-> 1.6)
+ * is clearly more lively but still easy to read.
+ */
+export function naturalnessScale(n: number): number {
+  const v = clamp(n, 0, NATURALNESS_MAX)
+  return v <= NATURALNESS_DEFAULT ? v / NATURALNESS_DEFAULT : 1 + (v - NATURALNESS_DEFAULT) * 0.12
+}
 
 export interface RunOptions {
   x: number
@@ -52,7 +66,9 @@ export interface PlacedGlyph {
   rotationDeg: number
   sizeScale: number
   widthScale: number
-  pointAmplitude: number
+  shearDeg: number
+  /** Peak displacement of the smooth field applied to this glyph, px. */
+  fieldAmplitude: number
   strokeWidth: number
 }
 
@@ -94,13 +110,28 @@ export function measureText(font: Font, text: string, fontSize: number): number 
   return width
 }
 
+interface Shape {
+  rotationDeg: number
+  sizeScale: number
+  widthScale: number
+  shearDeg: number
+  field: Field
+}
+
 export function renderRun(font: Font, text: string, opts: RunOptions): GlyphRun {
   const { fontSize, connected = false } = opts
-  const k = clamp(opts.naturalness ?? NATURALNESS_DEFAULT, 0, NATURALNESS_MAX) / NATURALNESS_DEFAULT
+  const k = naturalnessScale(opts.naturalness ?? NATURALNESS_DEFAULT)
   const scale = fontSize / font.unitsPerEm
   const rand = mulberry32(hash(opts.seed, opts.runIndex ?? 0))
   /** Uniform in [-amplitude·k, amplitude·k]. */
   const sym = (amplitude: number) => (rand() * 2 - 1) * amplitude * k
+  const newShape = (): Shape => ({
+    rotationDeg: sym(JITTER.glyphRotationDeg),
+    sizeScale: 1 + sym(JITTER.size),
+    widthScale: 1 + sym(JITTER.width),
+    shearDeg: sym(JITTER.shearDeg),
+    field: randomField(rand, JITTER.field * fontSize * k * (0.5 + 0.5 * rand()), fontSize),
+  })
 
   const slopeDeg = sym(JITTER.lineSlopeDeg)
   const line = rotateAbout(opts.x, opts.y, slopeDeg)
@@ -121,15 +152,11 @@ export function renderRun(font: Font, text: string, opts: RunOptions): GlyphRun 
     const wordIndex = words.length
     const word: PlacedWord = { baselineShift: sym(JITTER.wordBaselinePx), spacingScale: 1 + sym(JITTER.wordSpacing) }
     words.push(word)
-    const wordRot = connected ? sym(JITTER.glyphRotationDeg) : 0
-    const wordSize = connected ? 1 + sym(JITTER.size) : 1
-    const wordWidth = connected ? 1 + sym(JITTER.width) : 1
-    // Connected words rotate/scale as a unit around their start on the baseline.
+    const wordShape = connected ? newShape() : undefined
     const wordMatrix = multiply(
       line,
       translate(pen, opts.y + word.baselineShift),
-      rotateAbout(0, 0, wordRot),
-      scaleXY(wordWidth * wordSize, wordSize),
+      wordShape ? shapeMatrix(wordShape, 0, 0) : IDENTITY,
     )
 
     let local = 0
@@ -138,44 +165,37 @@ export function renderRun(font: Font, text: string, opts: RunOptions): GlyphRun 
       if (prev) local += kerning(font, prev, g) * scale
       prev = g
       const baseAdvance = (g.advanceWidth ?? 0) * scale
-
-      const rotationDeg = connected ? wordRot : sym(JITTER.glyphRotationDeg)
-      const sizeScale = connected ? wordSize : 1 + sym(JITTER.size)
-      const widthScale = connected ? wordWidth : 1 + sym(JITTER.width)
-      const pointAmplitude = JITTER.point * fontSize * k * (0.3 + 0.7 * rand())
+      const s = wordShape ?? newShape()
       const strokeWidth = JITTER.stroke * fontSize * k * rand()
+      const outline = g.getPath(0, 0, fontSize, undefined, font).commands
 
-      const outline = jitterPoints(g.getPath(0, 0, fontSize, undefined, font).commands, {
-        amplitude: pointAmplitude,
-        rand,
-        // Keep joins closed: no point jitter within ~8% em of the side bearings.
-        taper: connected ? { width: baseAdvance, fade: 0.08 * fontSize } : undefined,
-      })
-
-      const glyphAdvance = connected ? baseAdvance : baseAdvance * widthScale * sizeScale
-      const glyphMatrix = connected
-        ? translate(local, 0)
-        : multiply(
-            translate(local, 0),
-            rotateAbout(glyphAdvance / 2, -0.35 * fontSize * sizeScale, rotationDeg),
-            scaleXY(widthScale * sizeScale, sizeScale),
-          )
-      const m = multiply(wordMatrix, glyphMatrix)
+      let commands: PathCommand[]
+      let advance: number
+      if (wordShape) {
+        // Field and affine live in word coordinates: continuous across the joins between letters.
+        commands = mapPoints(outline, (x, y) => apply(wordMatrix, ...s.field(x + local, y)))
+        advance = baseAdvance * s.widthScale * s.sizeScale
+      } else {
+        advance = baseAdvance * s.widthScale * s.sizeScale
+        const m = multiply(wordMatrix, translate(local, 0), shapeMatrix(s, advance / 2, -0.35 * fontSize * s.sizeScale))
+        commands = mapPoints(outline, (x, y) => apply(m, ...s.field(x, y)))
+      }
 
       glyphs.push({
-        commands: transform(outline, m),
-        x: apply(m, 0, 0)[0],
-        advance: connected ? baseAdvance * wordWidth * wordSize : glyphAdvance,
+        commands,
+        x: apply(wordMatrix, local, 0)[0],
+        advance,
         word: wordIndex,
-        rotationDeg,
-        sizeScale,
-        widthScale,
-        pointAmplitude,
+        rotationDeg: s.rotationDeg,
+        sizeScale: s.sizeScale,
+        widthScale: s.widthScale,
+        shearDeg: s.shearDeg,
+        fieldAmplitude: s.field.amplitude,
         strokeWidth,
       })
-      local += glyphAdvance
+      local += wordShape ? baseAdvance : advance
     }
-    pen += connected ? local * wordWidth * wordSize : local
+    pen += wordShape ? local * wordShape.widthScale * wordShape.sizeScale : local
   }
 
   return { glyphs, words, slopeDeg, width: pen - opts.x }
@@ -216,37 +236,51 @@ function splitWords(glyphs: Glyph[]): { space: boolean; glyphs: Glyph[] }[] {
   return tokens
 }
 
-interface JitterConfig {
-  amplitude: number
-  rand: () => number
-  taper?: { width: number; fade: number }
+/** Scale from the origin, then rotate and shear around (px, py) given in scaled coordinates. */
+function shapeMatrix(s: Shape, px: number, py: number): Matrix {
+  return multiply(
+    translate(px, py),
+    rotateAbout(0, 0, s.rotationDeg),
+    shearX(s.shearDeg),
+    translate(-px, -py),
+    scaleXY(s.widthScale * s.sizeScale, s.sizeScale),
+  )
 }
 
-function jitterPoints(commands: PathCommand[], cfg: JitterConfig): PathCommand[] {
-  // Points that coincide (contour start/end, shared on-curve points) must move together or the outline cracks.
-  const moved = new Map<string, [number, number]>()
-  const move = (x: number, y: number): [number, number] => {
-    const key = `${x.toFixed(3)},${y.toFixed(3)}`
-    let p = moved.get(key)
-    if (!p) {
-      let a = cfg.amplitude
-      if (cfg.taper) {
-        const edge = Math.min(x, cfg.taper.width - x)
-        a *= clamp(edge / cfg.taper.fade, 0, 1)
-      }
-      p = [x + (cfg.rand() * 2 - 1) * a, y + (cfg.rand() * 2 - 1) * a]
-      moved.set(key, p)
-    }
-    return p
+/** A smooth displacement field: (x, y) -> (x + dx, y + dy), built from two low-frequency plane waves per axis. */
+interface Field {
+  (x: number, y: number): [number, number]
+  amplitude: number
+}
+
+function randomField(rand: () => number, amplitude: number, em: number): Field {
+  const [fMin, fMax] = JITTER.fieldFrequency
+  const wave = (weight: number) => {
+    const freq = (fMin + (fMax - fMin) * rand()) * 2 * Math.PI / em
+    const angle = rand() * 2 * Math.PI
+    return { kx: Math.cos(angle) * freq, ky: Math.sin(angle) * freq, phase: rand() * 2 * Math.PI, weight }
   }
-  return mapPoints(commands, move)
+  // Weights sum to 1 per axis, so |dx|, |dy| <= amplitude.
+  const xs = [wave(0.6), wave(0.4)]
+  const ys = [wave(0.6), wave(0.4)]
+  const sum = (ws: typeof xs, x: number, y: number) =>
+    ws.reduce((acc, w) => acc + w.weight * Math.sin(w.kx * x + w.ky * y + w.phase), 0)
+  const field = ((x: number, y: number) => [
+    x + amplitude * sum(xs, x, y),
+    y + amplitude * sum(ys, x, y),
+  ]) as Field
+  field.amplitude = amplitude
+  return field
 }
 
 // 2D affine matrices in canvas order: [a, b, c, d, e, f] -> x' = a·x + c·y + e, y' = b·x + d·y + f
 type Matrix = readonly [number, number, number, number, number, number]
 
+const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
 const translate = (x: number, y: number): Matrix => [1, 0, 0, 1, x, y]
 const scaleXY = (sx: number, sy: number): Matrix => [sx, 0, 0, sy, 0, 0]
+/** Positive shear leans tops to the right (y grows downwards). */
+const shearX = (deg: number): Matrix => [1, 0, -Math.tan((deg * Math.PI) / 180), 1, 0, 0]
 
 function rotateAbout(cx: number, cy: number, deg: number): Matrix {
   const r = (deg * Math.PI) / 180
@@ -270,8 +304,6 @@ const apply = (m: Matrix, x: number, y: number): [number, number] => [
   m[0] * x + m[2] * y + m[4],
   m[1] * x + m[3] * y + m[5],
 ]
-
-const transform = (commands: PathCommand[], m: Matrix) => mapPoints(commands, (x, y) => apply(m, x, y))
 
 function mapPoints(commands: PathCommand[], f: (x: number, y: number) => [number, number]): PathCommand[] {
   return commands.map((c) => {

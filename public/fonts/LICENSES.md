@@ -26,6 +26,9 @@ their names (OFL-1.1 §3); their version string notes the modification.
   pointing at the font's own U+2018 (‘) glyph.
 - **Caveat, Shantell Sans, Bad Script, Pacifico:** side bearings of the ʻ ʼ ‘ ’ glyphs normalised to 0.04 em
   on each side. The originals had large left bearings or ink overflowing the advance, which drew as "ma ʼno".
+- **Caveat, Bad Script** (slanted), and slightly Pacifico, Playpen Sans, Shantell Sans: the ʻ ʼ ‘ ’ glyphs are
+  fitted between their neighbours at the mark’s own height — advance shortened so the next ascender is at most
+  0.12 em away ("Bogʻ larda"), left bearing widened where a slanted O/G would cover the mark.
 - **Bad Script:** Ў (U+040E) had no breve in the original outline; rebuilt as У + breve.
 - **Shantell Sans:** the `ccmp` feature is unhooked from the script list (its chaining lookups can't be run
   by opentype.js and made every string fail to shape). Text is precomposed Unicode, so nothing is lost.
