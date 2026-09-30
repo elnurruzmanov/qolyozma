@@ -19,7 +19,7 @@ function newDoc() {
   doc.addFileToVFS('Playpen.ttf', FONT)
   doc.addFont('Playpen.ttf', 'Playpen', 'normal')
   doc.setFont('Playpen')
-  doc.setCreationDate(new Date(Date.UTC(2026, 0, 1)))
+  doc.setCreationDate("D:20260101000000+00'00'") // string, not Date: jsPDF formats a Date in the local timezone
   doc.setFileId('00000000000000000000000000000000')
   return doc
 }
