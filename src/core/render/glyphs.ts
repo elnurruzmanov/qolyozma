@@ -15,6 +15,21 @@
  * field is continuous across the joins between letters.
  */
 import type { Font, Glyph, PathCommand } from 'opentype.js'
+import {
+  IDENTITY,
+  apply,
+  clamp,
+  hash,
+  mulberry32,
+  multiply,
+  randomField,
+  rotateAbout,
+  scaleXY,
+  shearX,
+  translate,
+  type Field,
+  type Matrix,
+} from './deform'
 
 /** Amplitudes at naturalness = NATURALNESS_DEFAULT. Angles in degrees, `*Px` in CSS px, the rest relative. */
 export const JITTER = {
@@ -32,6 +47,10 @@ export const JITTER = {
   /** Max extra stroke width (ink pressure), fraction of the em size. */
   stroke: 0.015,
 } as const
+
+/** Extra stroke width per unit of `weight` (pen thickness), fraction of the em size. */
+export const WEIGHT_STEP = 0.012
+export const WEIGHT_MAX = 5
 
 export const NATURALNESS_DEFAULT = 5
 export const NATURALNESS_MAX = 10
@@ -55,6 +74,10 @@ export interface RunOptions {
   connected?: boolean
   /** 0–10, default 5. */
   naturalness?: number
+  /** Writer's slant in degrees, added to every glyph's shear; positive leans right. Not scaled by naturalness. */
+  slantDeg?: number
+  /** Pen thickness 0–WEIGHT_MAX: a constant stroke added on top of the ink-pressure variation. Default 0. */
+  weight?: number
 }
 
 export interface PlacedGlyph {
@@ -79,6 +102,8 @@ export interface PlacedWord {
 }
 
 export interface GlyphRun {
+  /** The text this run draws. */
+  text: string
   glyphs: PlacedGlyph[]
   words: PlacedWord[]
   slopeDeg: number
@@ -119,7 +144,8 @@ interface Shape {
 }
 
 export function renderRun(font: Font, text: string, opts: RunOptions): GlyphRun {
-  const { fontSize, connected = false } = opts
+  const { fontSize, connected = false, slantDeg = 0 } = opts
+  const penWidth = clamp(opts.weight ?? 0, 0, WEIGHT_MAX) * WEIGHT_STEP * fontSize
   const k = naturalnessScale(opts.naturalness ?? NATURALNESS_DEFAULT)
   const scale = fontSize / font.unitsPerEm
   const rand = mulberry32(hash(opts.seed, opts.runIndex ?? 0))
@@ -129,8 +155,8 @@ export function renderRun(font: Font, text: string, opts: RunOptions): GlyphRun 
     rotationDeg: sym(JITTER.glyphRotationDeg),
     sizeScale: 1 + sym(JITTER.size),
     widthScale: 1 + sym(JITTER.width),
-    shearDeg: sym(JITTER.shearDeg),
-    field: randomField(rand, JITTER.field * fontSize * k * (0.5 + 0.5 * rand()), fontSize),
+    shearDeg: sym(JITTER.shearDeg) + slantDeg,
+    field: randomField(rand, JITTER.field * fontSize * k * (0.5 + 0.5 * rand()), fontSize, JITTER.fieldFrequency),
   })
 
   const slopeDeg = sym(JITTER.lineSlopeDeg)
@@ -166,7 +192,7 @@ export function renderRun(font: Font, text: string, opts: RunOptions): GlyphRun 
       prev = g
       const baseAdvance = (g.advanceWidth ?? 0) * scale
       const s = wordShape ?? newShape()
-      const strokeWidth = JITTER.stroke * fontSize * k * rand()
+      const strokeWidth = JITTER.stroke * fontSize * k * rand() + penWidth
       const outline = g.getPath(0, 0, fontSize, undefined, font).commands
 
       let commands: PathCommand[]
@@ -198,7 +224,7 @@ export function renderRun(font: Font, text: string, opts: RunOptions): GlyphRun 
     pen += wordShape ? local * wordShape.widthScale * wordShape.sizeScale : local
   }
 
-  return { glyphs, words, slopeDeg, width: pen - opts.x }
+  return { text, glyphs, words, slopeDeg, width: pen - opts.x }
 }
 
 export function commandsToSvgPath(commands: PathCommand[], decimals = 2): string {
@@ -247,64 +273,6 @@ function shapeMatrix(s: Shape, px: number, py: number): Matrix {
   )
 }
 
-/** A smooth displacement field: (x, y) -> (x + dx, y + dy), built from two low-frequency plane waves per axis. */
-interface Field {
-  (x: number, y: number): [number, number]
-  amplitude: number
-}
-
-function randomField(rand: () => number, amplitude: number, em: number): Field {
-  const [fMin, fMax] = JITTER.fieldFrequency
-  const wave = (weight: number) => {
-    const freq = (fMin + (fMax - fMin) * rand()) * 2 * Math.PI / em
-    const angle = rand() * 2 * Math.PI
-    return { kx: Math.cos(angle) * freq, ky: Math.sin(angle) * freq, phase: rand() * 2 * Math.PI, weight }
-  }
-  // Weights sum to 1 per axis, so |dx|, |dy| <= amplitude.
-  const xs = [wave(0.6), wave(0.4)]
-  const ys = [wave(0.6), wave(0.4)]
-  const sum = (ws: typeof xs, x: number, y: number) =>
-    ws.reduce((acc, w) => acc + w.weight * Math.sin(w.kx * x + w.ky * y + w.phase), 0)
-  const field = ((x: number, y: number) => [
-    x + amplitude * sum(xs, x, y),
-    y + amplitude * sum(ys, x, y),
-  ]) as Field
-  field.amplitude = amplitude
-  return field
-}
-
-// 2D affine matrices in canvas order: [a, b, c, d, e, f] -> x' = a·x + c·y + e, y' = b·x + d·y + f
-type Matrix = readonly [number, number, number, number, number, number]
-
-const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
-const translate = (x: number, y: number): Matrix => [1, 0, 0, 1, x, y]
-const scaleXY = (sx: number, sy: number): Matrix => [sx, 0, 0, sy, 0, 0]
-/** Positive shear leans tops to the right (y grows downwards). */
-const shearX = (deg: number): Matrix => [1, 0, -Math.tan((deg * Math.PI) / 180), 1, 0, 0]
-
-function rotateAbout(cx: number, cy: number, deg: number): Matrix {
-  const r = (deg * Math.PI) / 180
-  const cos = Math.cos(r)
-  const sin = Math.sin(r)
-  return [cos, sin, -sin, cos, cx - cx * cos + cy * sin, cy - cx * sin - cy * cos]
-}
-
-function multiply(...ms: Matrix[]): Matrix {
-  return ms.reduce((p, q) => [
-    p[0] * q[0] + p[2] * q[1],
-    p[1] * q[0] + p[3] * q[1],
-    p[0] * q[2] + p[2] * q[3],
-    p[1] * q[2] + p[3] * q[3],
-    p[0] * q[4] + p[2] * q[5] + p[4],
-    p[1] * q[4] + p[3] * q[5] + p[5],
-  ])
-}
-
-const apply = (m: Matrix, x: number, y: number): [number, number] => [
-  m[0] * x + m[2] * y + m[4],
-  m[1] * x + m[3] * y + m[5],
-]
-
 function mapPoints(commands: PathCommand[], f: (x: number, y: number) => [number, number]): PathCommand[] {
   return commands.map((c) => {
     switch (c.type) {
@@ -328,25 +296,4 @@ function mapPoints(commands: PathCommand[], f: (x: number, y: number) => [number
         return c
     }
   })
-}
-
-const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
-
-function hash(a: number, b: number): number {
-  let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x6a09e667, 0xc2b2ae35)
-  h ^= h >>> 16
-  h = Math.imul(h, 0x7feb352d)
-  h ^= h >>> 15
-  return h >>> 0
-}
-
-function mulberry32(seed: number): () => number {
-  let s = seed >>> 0
-  return () => {
-    s = (s + 0x6d2b79f5) >>> 0
-    let t = s
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
 }

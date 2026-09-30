@@ -33,6 +33,8 @@ export interface DiagramLabel {
   /** Baseline start, diagram coordinates. */
   x: number
   y: number
+  /** Width of the original text, pt: a redrawn label is centred on the original. */
+  width: number
   fontSize: number
 }
 

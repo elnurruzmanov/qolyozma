@@ -9,7 +9,7 @@ import {
   type GlyphRun,
 } from '../core/render/glyphs'
 import { drawRuns } from '../core/render/canvas'
-import { parseFontFile } from '../core/render/fontFile'
+import { loadFont } from '../ui/loadFont'
 
 const SAMPLE =
   'Oʻzbekiston — goʻzal yurt. Bogʻlarda gʻoʻza ochildi, maʼno toʻla kun. ' +
@@ -25,21 +25,6 @@ const MODES: { id: Mode; label: string }[] = [
 const FONT_SIZE = 32
 const LINE_HEIGHT = 44
 const PADDING = 16
-
-const fontCache = new Map<string, Promise<Font>>()
-function loadFont(file: string): Promise<Font> {
-  let p = fontCache.get(file)
-  if (!p) {
-    p = fetch(`/fonts/${file}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Font ${file}: HTTP ${r.status}`)
-        return r.arrayBuffer()
-      })
-      .then(parseFontFile)
-    fontCache.set(file, p)
-  }
-  return p
-}
 
 function wrap(font: Font, text: string, maxWidth: number): string[] {
   const lines: string[] = []

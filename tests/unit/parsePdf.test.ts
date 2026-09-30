@@ -103,6 +103,7 @@ describe('diagram.pdf', async () => {
   it('attaches each box label to the diagram, inside its box', () => {
     const d = diagrams[0]!
     expect(d.labels.map((l) => l.text)).toEqual(['Fayl', 'Tahlil', 'Natija'])
+    for (const l of d.labels) expect(l.width).toBeGreaterThan(l.fontSize) // text width, for centring redrawn labels
     const boxes = d.shapes.filter((s) => s.closed && s.stroked && !s.filled)
     d.labels.forEach((label, i) => {
       const xs = boxes[i]!.points.map((p) => p[0])

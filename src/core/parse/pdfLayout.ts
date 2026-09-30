@@ -302,7 +302,7 @@ function diagramFromCluster(cluster: Cluster, runs: TextRun[], used: Set<TextRun
   labelRuns.forEach((r) => used.add(r))
   const labels = groupLines(labelRuns, LABEL_SPLIT).map((l) => {
     const [x, y] = rel([l.x, l.y])
-    return { text: l.text, x, y, fontSize: l.fontSize }
+    return { text: l.text, x, y, width: round(l.width), fontSize: l.fontSize }
   })
   return { kind: 'diagram', width: round(box.right - box.left), height: round(box.bottom - box.top), shapes, labels }
 }
@@ -319,6 +319,7 @@ interface Line {
   x: number
   /** Baseline. */
   y: number
+  width: number
   fontSize: number
 }
 
@@ -349,7 +350,9 @@ export function groupLines(runs: TextRun[], splitGap = Infinity): Line[] {
         end = r.x + r.width
       }
       text = normalizeText(text).trim()
-      if (text) lines.push({ text, x: current[0]!.x, y: current[0]!.y, fontSize: Math.max(...current.map((r) => r.fontSize)) })
+      const x = current[0]!.x
+      const fontSize = Math.max(...current.map((r) => r.fontSize))
+      if (text) lines.push({ text, x, y: current[0]!.y, width: end - x, fontSize })
       current = []
     }
     for (const r of row) {

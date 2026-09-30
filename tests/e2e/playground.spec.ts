@@ -42,8 +42,6 @@ test('font picker only offers the fonts allowed in the selected mode', async ({ 
 })
 
 test.describe('every font visibly varies between seeds', () => {
-  test.skip(({ isMobile }) => isMobile, 'desktop only: pixel measurements')
-
   for (const font of FONTS) {
     test(font.family, async ({ page }) => {
       const params = { mode: font.modes[0]!, font: font.id }
@@ -56,15 +54,14 @@ test.describe('every font visibly varies between seeds', () => {
 })
 
 test.describe('Uzbek Cyrillic letters keep their diacritic', () => {
-  test.skip(({ isMobile }) => isMobile, 'desktop only: pixel measurements')
-
   for (const font of FONTS) {
     test(font.family, async ({ page }) => {
       const render = async (text: string) => {
         await openPlayground(page, { mode: font.modes[0]!, font: font.id, n: 0, text })
         return inkBox(page)
       }
-      const em = 32 // playground font size in CSS px; desktop project has devicePixelRatio 1
+      // Playground font size is 32 CSS px; the canvas is drawn at devicePixelRatio (2.625 on the Pixel 7 project).
+      const em = 32 * (await page.evaluate(() => window.devicePixelRatio))
       for (const [letter, base] of DIACRITIC_PAIRS) {
         const withMark = await render(letter)
         const plain = await render(base)

@@ -30,6 +30,14 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    # The official Playwright image (browsers + system libraries pinned), so the visual snapshots in
+    # tests/e2e/*-snapshots render identically here and in `npm run e2e:docker`. The tag must match the
+    # @playwright/test version in package.json (checked by tests/unit/ci.test.ts).
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --user 1001
+    env:
+      VISUAL: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,11 +45,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: npm run e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report
-          path: playwright-report
+          path: |
+            playwright-report
+            test-results
           retention-days: 7

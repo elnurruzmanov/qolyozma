@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:docker": "node scripts/e2e-docker.mjs",
+    "e2e:update-snapshots": "node scripts/e2e-docker.mjs --update-snapshots",
     "build:fonts": "uv run --no-project --with fonttools[woff]==4.66.0 python scripts/build-fonts.py",
     "fixtures": "node scripts/make-fixtures.mjs"
   },
@@ -24,7 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
